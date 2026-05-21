@@ -5,6 +5,8 @@ export class SpeechRecognizer {
   private recognition: any;
   private finalTranscript = '';
   private running = false;
+  private sessionId = 0;
+  private seen = new Set<string>(); // "sessionId:resultIndex" — prevents duplicate finals
 
   constructor(
     private onUpdate: UpdateCallback,
@@ -24,9 +26,15 @@ export class SpeechRecognizer {
     this.recognition.onresult = (e: any) => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) this.finalTranscript += t + ' ';
-        else interim += t;
+        const key = `${this.sessionId}:${i}`;
+        if (e.results[i].isFinal) {
+          if (!this.seen.has(key)) {
+            this.seen.add(key);
+            this.finalTranscript += e.results[i][0].transcript + ' ';
+          }
+        } else {
+          interim += e.results[i][0].transcript;
+        }
       }
       this.onUpdate(interim, this.finalTranscript.trim());
     };
@@ -36,12 +44,17 @@ export class SpeechRecognizer {
     };
 
     this.recognition.onend = () => {
-      if (this.running) this.recognition.start();
+      if (this.running) {
+        this.sessionId++;
+        this.recognition.start();
+      }
     };
   }
 
   start(): void {
     this.finalTranscript = '';
+    this.seen.clear();
+    this.sessionId = 0;
     this.running = true;
     this.recognition.start();
     this.onState('started');
