@@ -171,7 +171,19 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
         (s, detail) => {
           if (s === 'error') {
             showToast(`Mic error: ${detail ?? 'unknown'}`);
+            recognizer = null;
             setState('idle');
+          } else if (s === 'stopped' && state === 'recording') {
+            // Natural end (silence timeout) — grab what we have and clean up
+            const text = recognizer?.transcript ?? '';
+            recognizer = null;
+            if (text) {
+              pendingRaw = text;
+              setState('cleaning');
+              runCleanup();
+            } else {
+              setState('idle');
+            }
           }
         },
       );
@@ -188,6 +200,10 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     recognizer = null;
     if (!pendingRaw) { setState('idle'); return; }
     setState('cleaning');
+    await runCleanup();
+  }
+
+  async function runCleanup(): Promise<void> {
     try {
       const ctx = scene!.paragraphs.slice(-3).map(p => p.clean || p.raw).join('\n\n');
       pendingClean = await cleanupProse(pendingRaw, ctx);

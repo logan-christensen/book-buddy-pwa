@@ -5,8 +5,7 @@ export class SpeechRecognizer {
   private recognition: any;
   private finalTranscript = '';
   private running = false;
-  private sessionId = 0;
-  private seen = new Set<string>(); // "sessionId:resultIndex" — prevents duplicate finals
+  private seen = new Set<number>(); // result indices already committed to finalTranscript
 
   constructor(
     private onUpdate: UpdateCallback,
@@ -26,10 +25,9 @@ export class SpeechRecognizer {
     this.recognition.onresult = (e: any) => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const key = `${this.sessionId}:${i}`;
         if (e.results[i].isFinal) {
-          if (!this.seen.has(key)) {
-            this.seen.add(key);
+          if (!this.seen.has(i)) {
+            this.seen.add(i);
             this.finalTranscript += e.results[i][0].transcript + ' ';
           }
         } else {
@@ -43,10 +41,13 @@ export class SpeechRecognizer {
       if (e.error !== 'aborted') this.onState('error', e.error);
     };
 
+    // Don't restart on natural end — let the editor decide what to do.
+    // Restarting causes Chrome mobile to replay previous finals with fresh
+    // indices, bypassing the seen-set dedup.
     this.recognition.onend = () => {
       if (this.running) {
-        this.sessionId++;
-        this.recognition.start();
+        this.running = false;
+        this.onState('stopped');
       }
     };
   }
@@ -54,7 +55,6 @@ export class SpeechRecognizer {
   start(): void {
     this.finalTranscript = '';
     this.seen.clear();
-    this.sessionId = 0;
     this.running = true;
     this.recognition.start();
     this.onState('started');
@@ -62,8 +62,12 @@ export class SpeechRecognizer {
 
   stop(): string {
     this.running = false;
-    this.recognition.stop();
+    try { this.recognition.stop(); } catch { /* already stopped */ }
     this.onState('stopped');
+    return this.finalTranscript.trim();
+  }
+
+  get transcript(): string {
     return this.finalTranscript.trim();
   }
 }
