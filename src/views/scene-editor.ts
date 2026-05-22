@@ -94,11 +94,18 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
       if (!wrap) return;
       const pol = wrap.querySelector<HTMLElement>('.para-polished');
       const orig = wrap.querySelector<HTMLElement>('.para-original');
-      if (!pol || !orig) return;
+      const inner = wrap.querySelector<HTMLElement>('.para-inner');
+      if (!pol || !orig || !inner) return;
       pol.style.transition = 'none';
       orig.style.transition = 'none';
+      inner.style.transition = 'none';
+      inner.style.height = orig.scrollHeight + 'px';
       wrap.classList.add('is-swiped');
-      requestAnimationFrame(() => { pol.style.transition = ''; orig.style.transition = ''; });
+      requestAnimationFrame(() => {
+        pol.style.transition = '';
+        orig.style.transition = '';
+        inner.style.transition = '';
+      });
     });
 
     // Highlight paragraph being edited
@@ -337,8 +344,10 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     let startX = 0, startY = 0, startTime = 0;
     let polEl: HTMLElement | null = null;
     let origEl: HTMLElement | null = null;
+    let innerEl: HTMLElement | null = null;
     let wrapEl: HTMLElement | null = null;
     let paraW = 0, startOffset = 0;
+    let polishedH = 0, origH = 0;
     let active = false;
 
     const getWraps = () => document.querySelectorAll<HTMLElement>('.para-wrap');
@@ -348,38 +357,47 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
       if (!para) return;
       polEl = para.querySelector<HTMLElement>('.para-polished');
       origEl = para.querySelector<HTMLElement>('.para-original');
-      if (!polEl || !origEl) return;
+      innerEl = para.querySelector<HTMLElement>('.para-inner');
+      if (!polEl || !origEl || !innerEl) return;
       wrapEl = para;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       startTime = Date.now();
-      paraW = para.querySelector<HTMLElement>('.para-inner')!.offsetWidth;
+      paraW = innerEl.offsetWidth;
       startOffset = para.classList.contains('is-swiped') ? -paraW : 0;
+      // Measure heights: polished drives closed height, orig drives open height
+      polishedH = polEl.scrollHeight;
+      origH = origEl.scrollHeight;
       active = false;
     }, { passive: true });
 
     scroll.addEventListener('touchmove', e => {
-      if (!polEl || !origEl || !wrapEl) return;
+      if (!polEl || !origEl || !innerEl || !wrapEl) return;
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
 
       if (!active) {
         if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-        if (Math.abs(dy) > Math.abs(dx)) { polEl = origEl = wrapEl = null; return; }
+        if (Math.abs(dy) > Math.abs(dx)) { polEl = origEl = innerEl = wrapEl = null; return; }
         active = true;
         polEl.style.transition = 'none';
         origEl.style.transition = 'none';
+        innerEl.style.transition = 'none';
+        // Pin height explicitly so we can interpolate it
+        innerEl.style.height = innerEl.offsetHeight + 'px';
         getWraps().forEach(el => { if (el !== wrapEl) el.classList.add('dimmed'); });
       }
 
       const offset = Math.max(-paraW, Math.min(0, startOffset + dx));
+      const progress = Math.abs(offset) / paraW;
       polEl.style.transform = `translateX(${offset}px)`;
       origEl.style.transform = `translateX(calc(100% + ${offset}px))`;
+      innerEl.style.height = (polishedH + (origH - polishedH) * progress) + 'px';
     }, { passive: true });
 
     scroll.addEventListener('touchend', e => {
-      if (!polEl || !origEl || !wrapEl) return;
-      if (!active) { polEl = origEl = wrapEl = null; return; }
+      if (!polEl || !origEl || !innerEl || !wrapEl) return;
+      if (!active) { polEl = origEl = innerEl = wrapEl = null; return; }
 
       const dx = e.changedTouches[0].clientX - startX;
       const velocity = Math.abs(dx) / Math.max(1, Date.now() - startTime);
@@ -388,14 +406,18 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
       const shouldOpen = wasOpen ? !(dx > threshold) : dx < -threshold;
 
       const targetOffset = shouldOpen ? -paraW : 0;
-      const p = polEl, o = origEl, wrap = wrapEl;
-      polEl = origEl = wrapEl = null;
+      const targetH = shouldOpen ? origH : polishedH;
+      const p = polEl, o = origEl, inn = innerEl, wrap = wrapEl;
+      polEl = origEl = innerEl = wrapEl = null;
       active = false;
 
-      p.style.transition = 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-      o.style.transition = 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      const ease = '0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      p.style.transition = `transform ${ease}`;
+      o.style.transition = `transform ${ease}`;
+      inn.style.transition = `height ${ease}`;
       p.style.transform = `translateX(${targetOffset}px)`;
       o.style.transform = `translateX(calc(100% + ${targetOffset}px))`;
+      inn.style.height = targetH + 'px';
 
       p.addEventListener('transitionend', () => {
         wrap.classList.toggle('is-swiped', shouldOpen);
@@ -404,6 +426,8 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
         p.style.transition = '';
         o.style.transform = '';
         o.style.transition = '';
+        inn.style.transition = '';
+        if (!shouldOpen) inn.style.height = ''; // back to auto (polished drives it)
         getWraps().forEach(el => el.classList.remove('dimmed'));
       }, { once: true });
     }, { passive: true });
