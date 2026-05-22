@@ -54,7 +54,8 @@ Your job is to clean up raw dictated or typed text into polished, readable prose
 - Preserve the author's voice, style, and all narrative choices
 - Never advance the plot, add new events, or invent details
 - Keep every idea present in the raw input — just express it cleanly
-- Split into natural paragraphs where appropriate
+- Preserve the paragraph structure of the input: one polished paragraph for each input paragraph
+- If the input has no paragraph breaks, output a single paragraph
 - Return ONLY the cleaned prose — no commentary, no meta-text, no "Here is the cleaned version:"
 
 Output one or more prose paragraphs, each separated by a blank line. Nothing else.`;

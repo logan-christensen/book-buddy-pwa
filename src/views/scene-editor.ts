@@ -227,17 +227,18 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     hideReview();
     setComposerBusy(false);
 
-    const blocks = finalClean.split(/\n\n+/).filter(Boolean);
+    const cleanBlocks = finalClean.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+    const rawBlocks = rawText.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
     const now = new Date().toISOString();
 
     if (editingPid) {
       replaceParagraph(editingPid, rawText, finalClean, 'ai');
     } else {
-      blocks.forEach((block, i) => {
+      cleanBlocks.forEach((clean, i) => {
         scene!.paragraphs.push({
           pid: crypto.randomUUID(),
-          raw: i === 0 ? rawText : '',
-          clean: block.trim(),
+          raw: rawBlocks[i] ?? '',
+          clean,
           type: 'ai',
           created_at: now,
         });
