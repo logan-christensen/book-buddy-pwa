@@ -88,14 +88,17 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     }
     el.innerHTML = scene!.paragraphs.map(paraHTML).join('');
 
-    // Restore any open swipe state without animation
+    // Restore open swipe state without transition animation
     openParagraphs.forEach(pid => {
-      const track = el.querySelector<HTMLElement>(`[data-pid="${pid}"] .para-track`);
-      if (track) {
-        track.style.transition = 'none';
-        track.classList.add('is-open');
-        requestAnimationFrame(() => { track.style.transition = ''; });
-      }
+      const wrap = el.querySelector<HTMLElement>(`[data-pid="${pid}"]`);
+      if (!wrap) return;
+      const pol = wrap.querySelector<HTMLElement>('.para-polished');
+      const orig = wrap.querySelector<HTMLElement>('.para-original');
+      if (!pol || !orig) return;
+      pol.style.transition = 'none';
+      orig.style.transition = 'none';
+      wrap.classList.add('is-swiped');
+      requestAnimationFrame(() => { pol.style.transition = ''; orig.style.transition = ''; });
     });
 
     // Highlight paragraph being edited
@@ -117,16 +120,14 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     if (hasOriginal) {
       return `
         <div class="para-wrap ai-para" data-pid="${p.pid}">
-          <div class="para-outer">
-            <div class="para-track">
-              <div class="para-face para-polished">
-                <div class="accent-bar accent-amber"></div>
-                <p class="para-text">${esc(p.clean)}</p>
-              </div>
-              <div class="para-face para-original">
-                <div class="accent-bar accent-blue"></div>
-                <p class="para-text para-orig-text">${esc(p.raw)}</p>
-              </div>
+          <div class="para-inner">
+            <div class="para-polished">
+              <div class="accent-bar accent-amber"></div>
+              <p class="para-text">${esc(p.clean)}</p>
+            </div>
+            <div class="para-original">
+              <div class="accent-bar accent-blue"></div>
+              <p class="para-text para-orig-text">${esc(p.raw)}</p>
             </div>
           </div>
           <button class="para-edit-btn" title="Edit paragraph">✎</button>
@@ -334,66 +335,77 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
   function setupSwipe(): void {
     const scroll = document.getElementById('draft-scroll')!;
     let startX = 0, startY = 0, startTime = 0;
-    let track: HTMLElement | null = null;
+    let polEl: HTMLElement | null = null;
+    let origEl: HTMLElement | null = null;
+    let wrapEl: HTMLElement | null = null;
     let paraW = 0, startOffset = 0;
-    let dragging = false;
+    let active = false;
+
+    const getWraps = () => document.querySelectorAll<HTMLElement>('.para-wrap');
 
     scroll.addEventListener('touchstart', e => {
       const para = (e.target as HTMLElement).closest<HTMLElement>('.ai-para');
       if (!para) return;
-      track = para.querySelector<HTMLElement>('.para-track');
-      if (!track) return;
+      polEl = para.querySelector<HTMLElement>('.para-polished');
+      origEl = para.querySelector<HTMLElement>('.para-original');
+      if (!polEl || !origEl) return;
+      wrapEl = para;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       startTime = Date.now();
-      paraW = (track.parentElement as HTMLElement).offsetWidth;
-      startOffset = track.classList.contains('is-open') ? -paraW : 0;
-      dragging = false;
+      paraW = para.querySelector<HTMLElement>('.para-inner')!.offsetWidth;
+      startOffset = para.classList.contains('is-swiped') ? -paraW : 0;
+      active = false;
     }, { passive: true });
 
     scroll.addEventListener('touchmove', e => {
-      if (!track) return;
+      if (!polEl || !origEl || !wrapEl) return;
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
-      if (!dragging) {
+
+      if (!active) {
         if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-        if (Math.abs(dy) > Math.abs(dx)) { track = null; return; }
-        dragging = true;
-        track.style.transition = 'none';
+        if (Math.abs(dy) > Math.abs(dx)) { polEl = origEl = wrapEl = null; return; }
+        active = true;
+        polEl.style.transition = 'none';
+        origEl.style.transition = 'none';
+        getWraps().forEach(el => { if (el !== wrapEl) el.classList.add('dimmed'); });
       }
-      const clamped = Math.max(-paraW, Math.min(0, startOffset + dx));
-      track.style.transform = `translateX(${clamped}px)`;
+
+      const offset = Math.max(-paraW, Math.min(0, startOffset + dx));
+      polEl.style.transform = `translateX(${offset}px)`;
+      origEl.style.transform = `translateX(calc(100% + ${offset}px))`;
     }, { passive: true });
 
     scroll.addEventListener('touchend', e => {
-      if (!track || !dragging) { track = null; return; }
+      if (!polEl || !origEl || !wrapEl) return;
+      if (!active) { polEl = origEl = wrapEl = null; return; }
+
       const dx = e.changedTouches[0].clientX - startX;
-      const velocity = Math.abs(dx) / (Date.now() - startTime);
+      const velocity = Math.abs(dx) / Math.max(1, Date.now() - startTime);
       const threshold = velocity > 0.4 ? 12 : paraW * 0.28;
-      const isOpen = track.classList.contains('is-open');
-      const shouldOpen = isOpen ? dx > -threshold : dx < -threshold;
+      const wasOpen = wrapEl.classList.contains('is-swiped');
+      const shouldOpen = wasOpen ? !(dx > threshold) : dx < -threshold;
 
-      // Animate the snap
-      const targetPx = shouldOpen ? -paraW : 0;
-      track.style.transition = 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-      track.style.transform = `translateX(${targetPx}px)`;
+      const targetOffset = shouldOpen ? -paraW : 0;
+      const p = polEl, o = origEl, wrap = wrapEl;
+      polEl = origEl = wrapEl = null;
+      active = false;
 
-      const pid = track.closest<HTMLElement>('[data-pid]')?.dataset.pid;
-      track.addEventListener('transitionend', () => {
-        if (!track) return;
-        track.style.transition = '';
-        track.style.transform = '';
-        if (shouldOpen) {
-          track.classList.add('is-open');
-          if (pid) openParagraphs.add(pid);
-        } else {
-          track.classList.remove('is-open');
-          if (pid) openParagraphs.delete(pid);
-        }
+      p.style.transition = 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      o.style.transition = 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      p.style.transform = `translateX(${targetOffset}px)`;
+      o.style.transform = `translateX(calc(100% + ${targetOffset}px))`;
+
+      p.addEventListener('transitionend', () => {
+        wrap.classList.toggle('is-swiped', shouldOpen);
+        shouldOpen ? openParagraphs.add(wrap.dataset.pid!) : openParagraphs.delete(wrap.dataset.pid!);
+        p.style.transform = '';
+        p.style.transition = '';
+        o.style.transform = '';
+        o.style.transition = '';
+        getWraps().forEach(el => el.classList.remove('dimmed'));
       }, { once: true });
-
-      track = null;
-      dragging = false;
     }, { passive: true });
   }
 

@@ -240,28 +240,43 @@ code {
   color: var(--text-dim);
 }
 
-/* Swipe container */
-.para-outer {
+/* Swipe container — height comes from polished only */
+.para-inner {
+  position: relative;
   overflow: hidden;
-  border-radius: 4px;
 }
 
-.para-track {
-  display: flex;
-  width: 200%;
+.para-polished {
+  position: relative;
+  padding-left: 14px;
+  transform: translateX(0);
   transition: transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   will-change: transform;
 }
 
-.para-track.is-open {
-  transform: translateX(-50%);
+/* Original sits absolutely, never affects layout height */
+.para-original {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-left: 14px;
+  transform: translateX(100%);
+  transition: transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform;
 }
 
-.para-face {
-  width: 50%;
-  min-width: 50%;
-  padding-left: 14px;
-  position: relative;
+/* Swiped-open state */
+.para-wrap.is-swiped .para-polished { transform: translateX(-100%); }
+.para-wrap.is-swiped .para-original { transform: translateX(0); }
+
+/* Dim other paragraphs during swipe */
+.para-wrap {
+  transition: opacity 0.18s;
+}
+.para-wrap.dimmed {
+  opacity: 0.15;
+  pointer-events: none;
 }
 
 /* Accent bars */
