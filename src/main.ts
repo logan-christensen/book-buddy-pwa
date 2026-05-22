@@ -3,6 +3,12 @@ import { renderSceneList } from './views/scene-list';
 import { renderSceneEditor } from './views/scene-editor';
 import { renderSettings } from './views/settings-view';
 
+// Apply saved theme before first render
+const savedTheme = localStorage.getItem('bb_theme');
+if (savedTheme === 'light') {
+  document.documentElement.classList.replace('dark', 'light');
+}
+
 function route(): void {
   const hash = location.hash.slice(1) || '/';
   const app = document.getElementById('app')!;
