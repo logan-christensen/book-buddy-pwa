@@ -296,23 +296,32 @@ code {
   padding-left: 0;
 }
 
-/* Edit button */
-.para-edit-btn {
+/* Edit / delete buttons */
+.para-edit-btn,
+.para-delete-btn {
   position: absolute;
-  top: 2px;
   right: 0;
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   padding: 4px 6px;
   cursor: pointer;
   opacity: 0.3;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, color 0.15s;
   line-height: 1;
 }
+.para-edit-btn   { top: 2px; }
+.para-delete-btn { top: 24px; }
+
 .para-wrap:hover .para-edit-btn,
+.para-wrap:hover .para-delete-btn,
 .para-wrap.is-editing .para-edit-btn { opacity: 0.9; }
+
+.para-delete-btn.is-confirming {
+  opacity: 1;
+  color: var(--red);
+}
 
 /* Editing highlight */
 .para-wrap.is-editing .para-outer {

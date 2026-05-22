@@ -120,10 +120,28 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
         if (pid) startEdit(pid);
       });
     });
+
+    el.querySelectorAll<HTMLElement>('.para-delete-btn').forEach(btn => {
+      let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!btn.classList.contains('is-confirming')) {
+          btn.classList.add('is-confirming');
+          confirmTimer = setTimeout(() => btn.classList.remove('is-confirming'), 2000);
+          return;
+        }
+        if (confirmTimer) clearTimeout(confirmTimer);
+        const pid = btn.closest<HTMLElement>('[data-pid]')?.dataset.pid;
+        if (pid) deleteParagraph(pid);
+      });
+    });
   }
 
   function paraHTML(p: Paragraph): string {
     const hasOriginal = p.type === 'ai' && p.raw && p.raw !== p.clean;
+    const actions = `
+      <button class="para-edit-btn" title="Edit paragraph">✎</button>
+      <button class="para-delete-btn" title="Delete paragraph">✕</button>`;
     if (hasOriginal) {
       return `
         <div class="para-wrap ai-para" data-pid="${p.pid}">
@@ -137,13 +155,13 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
               <p class="para-text para-orig-text">${esc(p.raw)}</p>
             </div>
           </div>
-          <button class="para-edit-btn" title="Edit paragraph">✎</button>
+          ${actions}
         </div>`;
     }
     return `
       <div class="para-wrap" data-pid="${p.pid}">
         <p class="para-text">${esc(p.clean || p.raw)}</p>
-        <button class="para-edit-btn" title="Edit paragraph">✎</button>
+        ${actions}
       </div>`;
   }
 
@@ -305,6 +323,14 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     document.getElementById('edit-banner')!.classList.add('hidden');
     document.querySelectorAll('.para-wrap').forEach(el => el.classList.remove('is-editing'));
     (document.getElementById('compose-add') as HTMLButtonElement).textContent = 'Add';
+  }
+
+  function deleteParagraph(pid: string): void {
+    scene!.paragraphs = scene!.paragraphs.filter(p => p.pid !== pid);
+    openParagraphs.delete(pid);
+    if (editingPid === pid) cancelEdit();
+    renderParagraphs();
+    autoSave();
   }
 
   function replaceParagraph(pid: string, raw: string, clean: string, type: Paragraph['type']): void {
