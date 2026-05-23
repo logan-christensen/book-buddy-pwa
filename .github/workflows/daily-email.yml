@@ -18,4 +18,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          DATA_GITHUB_TOKEN: ${{ secrets.DATA_GITHUB_TOKEN }}
+          DATA_GITHUB_OWNER: logan-christensen
+          DATA_GITHUB_REPO: novel-scenes
+          DATA_GITHUB_BRANCH: main
         run: node .github/scripts/daily-email.mjs

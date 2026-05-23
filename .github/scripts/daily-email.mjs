@@ -1,26 +1,48 @@
-import { readdir, readFile } from 'fs/promises';
-import { join } from 'path';
-
-const { ANTHROPIC_API_KEY, RESEND_API_KEY, EMAIL_ADDRESS } = process.env;
+const {
+  ANTHROPIC_API_KEY, RESEND_API_KEY, EMAIL_ADDRESS,
+  DATA_GITHUB_TOKEN, DATA_GITHUB_OWNER, DATA_GITHUB_REPO, DATA_GITHUB_BRANCH,
+} = process.env;
 
 if (!ANTHROPIC_API_KEY || !RESEND_API_KEY || !EMAIL_ADDRESS) {
   console.log('Missing required secrets — skipping.');
   process.exit(0);
 }
 
-// Gather content from all scene JSON files
-const scenesDir = join(process.cwd(), 'scenes');
-const files = await readdir(scenesDir).catch(() => []);
-const jsonFiles = files.filter(f => f.endsWith('.json'));
+if (!DATA_GITHUB_TOKEN || !DATA_GITHUB_OWNER || !DATA_GITHUB_REPO) {
+  console.log('Missing DATA_GITHUB_* secrets — skipping.');
+  process.exit(0);
+}
+
+const branch = DATA_GITHUB_BRANCH || 'main';
+const ghHeaders = {
+  Authorization: `Bearer ${DATA_GITHUB_TOKEN}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+};
+const ghBase = `https://api.github.com/repos/${DATA_GITHUB_OWNER}/${DATA_GITHUB_REPO}`;
+
+// List scenes directory
+const dirRes = await fetch(`${ghBase}/contents/scenes?ref=${branch}`, { headers: ghHeaders });
+if (!dirRes.ok) {
+  console.log('Could not read scenes directory — skipping.');
+  process.exit(0);
+}
+const dirEntries = await dirRes.json();
+const jsonFiles = dirEntries.filter(f => f.name.endsWith('.json'));
 
 if (!jsonFiles.length) {
   console.log('No scenes yet — skipping.');
   process.exit(0);
 }
 
+// Fetch each scene file
 const sections = [];
-for (const file of jsonFiles) {
-  const data = JSON.parse(await readFile(join(scenesDir, file), 'utf-8'));
+for (const entry of jsonFiles) {
+  const fileRes = await fetch(entry.url, { headers: ghHeaders });
+  if (!fileRes.ok) continue;
+  const file = await fileRes.json();
+  const raw = Buffer.from(file.content.replace(/\s/g, ''), 'base64').toString('utf-8');
+  const data = JSON.parse(raw);
   const text = data.paragraphs
     .map(p => p.clean || p.raw)
     .filter(Boolean)
