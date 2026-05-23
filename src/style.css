@@ -120,17 +120,53 @@ code {
 .scene-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 15px 16px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.18s;
+  user-select: none;
+}
+.scene-card.is-armed { border-color: var(--red); }
+
+.scene-card-link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 15px 16px;
   color: var(--text);
   text-decoration: none;
+}
+.scene-card-link:hover { text-decoration: none; }
+.scene-card:not(.is-armed):hover .scene-card-link { background: var(--surface); }
+
+.scene-name { font-size: 1rem; }
+
+.scene-card-arrow {
+  padding-right: 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  transition: opacity 0.18s;
+}
+.scene-card.is-armed .scene-card-arrow { display: none; }
+
+.scene-delete-btn {
+  display: none;
+  padding: 15px 18px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--red);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
   transition: background 0.12s;
 }
-.scene-card:hover { background: var(--surface); text-decoration: none; }
-.scene-name { font-size: 1rem; }
+.scene-card.is-armed .scene-delete-btn { display: block; }
+.scene-delete-btn:hover,
+.scene-delete-btn:active { background: var(--surface); }
+.scene-delete-btn.is-confirming { font-weight: 600; }
 
 .new-scene-row {
   display: flex;
@@ -226,7 +262,6 @@ code {
 .para-wrap {
   position: relative;
   margin-bottom: 24px;
-  padding-right: 28px; /* room for edit btn */
 }
 
 .para-text {
@@ -296,32 +331,38 @@ code {
   padding-left: 0;
 }
 
-/* Edit / delete buttons */
-.para-edit-btn,
-.para-delete-btn {
-  position: absolute;
-  right: 0;
+/* Floating context menu */
+.para-menu {
+  position: fixed;
+  z-index: 200;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+  overflow: hidden;
+  min-width: 148px;
+}
+
+.para-menu-item {
+  display: block;
+  width: 100%;
   background: none;
   border: none;
-  color: var(--muted);
-  font-size: 0.85rem;
-  padding: 4px 6px;
+  padding: 14px 20px;
+  text-align: left;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.95rem;
+  color: var(--text);
   cursor: pointer;
-  opacity: 0.3;
-  transition: opacity 0.15s, color 0.15s;
-  line-height: 1;
+  transition: background 0.12s;
 }
-.para-edit-btn   { top: 2px; }
-.para-delete-btn { top: 24px; }
-
-.para-wrap:hover .para-edit-btn,
-.para-wrap:hover .para-delete-btn,
-.para-wrap.is-editing .para-edit-btn { opacity: 0.9; }
-
-.para-delete-btn.is-confirming {
-  opacity: 1;
-  color: var(--red);
+.para-menu-item:not(:last-child) {
+  border-bottom: 1px solid var(--border);
 }
+.para-menu-item:hover,
+.para-menu-item:active { background: var(--surface); }
+
+.para-menu-delete.is-confirming { color: var(--red); }
 
 /* Editing highlight */
 .para-wrap.is-editing .para-outer {

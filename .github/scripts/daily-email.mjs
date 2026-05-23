@@ -21,7 +21,26 @@ const ghHeaders = {
 };
 const ghBase = `https://api.github.com/repos/${DATA_GITHUB_OWNER}/${DATA_GITHUB_REPO}`;
 
-// List scenes directory
+// ── Load reader history ───────────────────────────────────────────────────────
+
+const LOG_PATH = 'reader-log.json';
+let readerHistory = [];
+let logSha;
+
+try {
+  const logRes = await fetch(`${ghBase}/contents/${LOG_PATH}?ref=${branch}`, { headers: ghHeaders });
+  if (logRes.ok) {
+    const logFile = await logRes.json();
+    logSha = logFile.sha;
+    const logRaw = Buffer.from(logFile.content.replace(/\s/g, ''), 'base64').toString('utf-8');
+    readerHistory = JSON.parse(logRaw);
+  }
+} catch {
+  // No history yet — start fresh
+}
+
+// ── Load story content ────────────────────────────────────────────────────────
+
 const dirRes = await fetch(`${ghBase}/contents/scenes?ref=${branch}`, { headers: ghHeaders });
 if (!dirRes.ok) {
   console.log('Could not read scenes directory — skipping.');
@@ -35,7 +54,6 @@ if (!jsonFiles.length) {
   process.exit(0);
 }
 
-// Fetch each scene file
 const sections = [];
 for (const entry of jsonFiles) {
   const fileRes = await fetch(entry.url, { headers: ghHeaders });
@@ -57,7 +75,8 @@ if (!sections.length) {
 
 const storyContent = sections.join('\n\n---\n\n');
 
-// Ask Claude to generate 4 reader persona messages
+// ── Persona definitions ───────────────────────────────────────────────────────
+
 const PERSONAS = [
   {
     name: 'Maya',
@@ -93,9 +112,20 @@ const PERSONAS = [
   },
 ];
 
-const personaBlock = PERSONAS.map(p => `
-**${p.name}** — ${p.description}
-`).join('\n');
+const personaBlock = PERSONAS.map(p => `**${p.name}** — ${p.description}`).join('\n\n');
+
+// ── Build history context ─────────────────────────────────────────────────────
+
+const recentHistory = readerHistory.slice(-7);
+const historyContext = recentHistory.length
+  ? `\nThese readers have been following this story for a while. Here is what they said in previous sessions (oldest first). They should feel free to reference their earlier reactions, follow up on questions they asked before, or notice how the story has developed since they last read.\n\n` +
+    recentHistory.map(entry =>
+      `[${entry.date}]\n` +
+      entry.messages.map(m => `${m.name}: ${m.message}`).join('\n')
+    ).join('\n\n')
+  : '';
+
+// ── Call Claude ───────────────────────────────────────────────────────────────
 
 const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
   method: 'POST',
@@ -105,21 +135,24 @@ const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
     'content-type': 'application/json',
   },
   body: JSON.stringify({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1200,
-    system: `You are writing messages from four fictional readers who just read a novelist's draft. Each reader has a distinct personality and reads for different things. Write one message per reader — something they might actually send in a group chat or DM after reading.
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1600,
+    system: `You are writing messages from four fictional readers who have been following a novelist's work in progress. Each reader has a distinct personality and reads for different things. Write one message per reader — something they might actually send in a group chat or DM after reading.
 
 Each message should:
 - Sound like a real person texting, not a critic writing a review
-- Be specific to the actual content (characters, events, details) — never generic
+- Be specific to actual characters, events, and details — never generic
 - Reflect that reader's personality without being a caricature
 - Include at least one genuine question born from curiosity, not just enthusiasm
 - Be 3–6 sentences
+- If the reader asked a question in a previous session that now has an answer in the story, they should notice
+${historyContext}
 
 The four readers:
+
 ${personaBlock}
 
-Output valid JSON — an array of 4 objects, each with "name" and "message" fields. No other text before or after the JSON.`,
+Output valid JSON — an array of 4 objects, each with "name" and "message" fields. No markdown fences, no other text.`,
     messages: [{ role: 'user', content: storyContent }],
   }),
 });
@@ -139,8 +172,10 @@ if (!personas?.length) {
   process.exit(0);
 }
 
-// Build email HTML — social digest style
-const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+// ── Build email HTML ──────────────────────────────────────────────────────────
+
+const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+const todayISO = new Date().toISOString().split('T')[0];
 
 const personaMap = Object.fromEntries(PERSONAS.map(p => [p.name, p]));
 
@@ -162,7 +197,7 @@ const html = `<!DOCTYPE html>
 <body style="font-family:Georgia,serif;background:#fdf6ee;margin:0;padding:40px 20px;">
   <div style="max-width:560px;margin:0 auto;">
     <p style="font-family:system-ui,sans-serif;font-size:0.8rem;color:#9a7b6a;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Your readers</p>
-    <h2 style="font-family:Georgia,serif;color:#3d2b1f;font-weight:normal;margin:0 0 28px;">${today}</h2>
+    <h2 style="font-family:Georgia,serif;color:#3d2b1f;font-weight:normal;margin:0 0 28px;">${todayLabel}</h2>
     ${cards}
     <p style="font-family:system-ui,sans-serif;color:#9a7b6a;font-size:12px;margin-top:32px;border-top:1px solid #e8d5c4;padding-top:16px;">
       BookBuddy · your writing companion
@@ -171,7 +206,8 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 
-// Send via Resend
+// ── Send email ────────────────────────────────────────────────────────────────
+
 const resendRes = await fetch('https://api.resend.com/emails', {
   method: 'POST',
   headers: {
@@ -181,15 +217,42 @@ const resendRes = await fetch('https://api.resend.com/emails', {
   body: JSON.stringify({
     from: 'BookBuddy <bookbuddy@loganchristensen.com>',
     to: EMAIL_ADDRESS,
-    subject: `Your story, today — ${today}`,
+    subject: `Your readers checked in — ${todayLabel}`,
     html,
   }),
 });
 
-if (resendRes.ok) {
-  console.log(`Daily email sent to ${EMAIL_ADDRESS}`);
-} else {
+if (!resendRes.ok) {
   const err = await resendRes.json();
   console.error('Resend error:', JSON.stringify(err));
   process.exit(1);
+}
+
+console.log(`Daily email sent to ${EMAIL_ADDRESS}`);
+
+// ── Save history to data repo ─────────────────────────────────────────────────
+
+readerHistory.push({ date: todayISO, messages: personas });
+// Keep last 30 days
+if (readerHistory.length > 30) readerHistory.splice(0, readerHistory.length - 30);
+
+const logContent = Buffer.from(JSON.stringify(readerHistory, null, 2)).toString('base64');
+
+const saveRes = await fetch(`${ghBase}/contents/${LOG_PATH}`, {
+  method: 'PUT',
+  headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    message: `Reader log: ${todayISO}`,
+    content: logContent,
+    branch,
+    ...(logSha ? { sha: logSha } : {}),
+  }),
+});
+
+if (saveRes.ok) {
+  console.log('Reader history saved.');
+} else {
+  const err = await saveRes.json();
+  console.error('Failed to save history:', JSON.stringify(err));
+  // Non-fatal — email already sent
 }

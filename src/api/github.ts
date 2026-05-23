@@ -78,6 +78,21 @@ export async function saveScene(scene: Scene): Promise<void> {
   );
 }
 
+export async function deleteScene(slug: string): Promise<void> {
+  const { githubBranch } = getSettings();
+  async function deleteFile(path: string): Promise<void> {
+    try {
+      const file = await ghFetch(`/contents/${path}`);
+      await ghFetch(`/contents/${path}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ message: `Delete scene: ${slug}`, sha: file.sha, branch: githubBranch }),
+      });
+    } catch { /* file may not exist */ }
+  }
+  await deleteFile(`scenes/${slug}.json`);
+  await deleteFile(`scenes/${slug}.md`);
+}
+
 export async function createScene(name: string): Promise<Scene> {
   const slug = name
     .toLowerCase()

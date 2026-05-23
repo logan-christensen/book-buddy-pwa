@@ -1,4 +1,4 @@
-import { listSceneSlugs, createScene } from '../api/github';
+import { listSceneSlugs, createScene, deleteScene } from '../api/github';
 import { isConfigured } from '../settings';
 
 export function renderSceneList(container: HTMLElement): void {
@@ -49,14 +49,98 @@ export function renderSceneList(container: HTMLElement): void {
       }
       el.className = 'scenes-list';
       el.innerHTML = slugs.map(slug => `
-        <a href="#/scenes/${slug}" class="scene-card">
-          <span class="scene-name">${slugToName(slug)}</span>
-          <span>→</span>
-        </a>
+        <div class="scene-card" data-slug="${slug}">
+          <a href="#/scenes/${slug}" class="scene-card-link">
+            <span class="scene-name">${slugToName(slug)}</span>
+          </a>
+          <span class="scene-card-arrow">→</span>
+          <button class="scene-delete-btn">Delete</button>
+        </div>
       `).join('');
+
+      setupCardInteractions(el);
     } catch (e: any) {
       el.innerHTML = `<div class="error-state">${e.message}</div>`;
     }
+  }
+
+  function setupCardInteractions(el: HTMLElement): void {
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchMoved = false;
+
+    function armCard(card: HTMLElement): void {
+      disarmAll();
+      card.classList.add('is-armed');
+    }
+
+    function disarmAll(): void {
+      el.querySelectorAll<HTMLElement>('.scene-card.is-armed').forEach(c => {
+        c.classList.remove('is-armed');
+        const btn = c.querySelector<HTMLButtonElement>('.scene-delete-btn')!;
+        btn.textContent = 'Delete';
+        btn.classList.remove('is-confirming');
+      });
+    }
+
+    // Long press — touch
+    el.addEventListener('touchstart', e => {
+      touchMoved = false;
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.scene-card');
+      if (!card) return;
+      longPressTimer = setTimeout(() => {
+        if (!touchMoved) armCard(card);
+      }, 500);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', () => {
+      touchMoved = true;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }, { passive: true });
+
+    el.addEventListener('touchend', () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }, { passive: true });
+
+    // Long press — desktop (right click)
+    el.addEventListener('contextmenu', e => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.scene-card');
+      if (!card) return;
+      e.preventDefault();
+      armCard(card);
+    });
+
+    // Block navigation when card is armed
+    el.addEventListener('click', e => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.scene-card');
+      if (card?.classList.contains('is-armed')) {
+        const isDeleteBtn = (e.target as HTMLElement).closest('.scene-delete-btn');
+        if (!isDeleteBtn) { disarmAll(); e.preventDefault(); }
+      }
+    }, true); // capture so it fires before the <a>
+
+    // Delete button
+    el.addEventListener('click', e => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.scene-delete-btn');
+      if (!btn) return;
+      e.preventDefault();
+      if (!btn.classList.contains('is-confirming')) {
+        btn.textContent = 'Sure?';
+        btn.classList.add('is-confirming');
+        return;
+      }
+      const slug = btn.closest<HTMLElement>('[data-slug]')?.dataset.slug;
+      if (!slug) return;
+      btn.textContent = '…';
+      btn.disabled = true;
+      deleteScene(slug)
+        .then(() => loadList())
+        .catch(err => { alert('Delete failed: ' + err.message); loadList(); });
+    });
+
+    // Dismiss on outside tap
+    document.addEventListener('pointerdown', e => {
+      if (!el.contains(e.target as Node)) disarmAll();
+    });
   }
 
   async function onCreate() {

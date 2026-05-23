@@ -19,6 +19,11 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
         <div id="draft-paras"></div>
       </div>
 
+      <div id="para-menu" class="para-menu hidden">
+        <button id="para-menu-edit" class="para-menu-item">✎  Edit</button>
+        <button id="para-menu-delete" class="para-menu-item para-menu-delete">✕  Delete</button>
+      </div>
+
       <div id="composer" class="composer">
         <div id="edit-banner" class="edit-banner hidden">
           <span class="edit-banner-label">Editing paragraph</span>
@@ -74,6 +79,7 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
   renderParagraphs();
   setupComposer();
   setupSwipe();
+  setupContextMenu();
   setupTheme();
   setupWarmup();
   setupKeyboard();
@@ -112,36 +118,10 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
     if (editingPid) {
       el.querySelector(`[data-pid="${editingPid}"]`)?.classList.add('is-editing');
     }
-
-    el.querySelectorAll<HTMLElement>('.para-edit-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const pid = btn.closest<HTMLElement>('[data-pid]')?.dataset.pid;
-        if (pid) startEdit(pid);
-      });
-    });
-
-    el.querySelectorAll<HTMLElement>('.para-delete-btn').forEach(btn => {
-      let confirmTimer: ReturnType<typeof setTimeout> | null = null;
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        if (!btn.classList.contains('is-confirming')) {
-          btn.classList.add('is-confirming');
-          confirmTimer = setTimeout(() => btn.classList.remove('is-confirming'), 2000);
-          return;
-        }
-        if (confirmTimer) clearTimeout(confirmTimer);
-        const pid = btn.closest<HTMLElement>('[data-pid]')?.dataset.pid;
-        if (pid) deleteParagraph(pid);
-      });
-    });
   }
 
   function paraHTML(p: Paragraph): string {
     const hasOriginal = p.type === 'ai' && p.raw && p.raw !== p.clean;
-    const actions = `
-      <button class="para-edit-btn" title="Edit paragraph">✎</button>
-      <button class="para-delete-btn" title="Delete paragraph">✕</button>`;
     if (hasOriginal) {
       return `
         <div class="para-wrap ai-para" data-pid="${p.pid}">
@@ -155,13 +135,11 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
               <p class="para-text para-orig-text">${esc(p.raw)}</p>
             </div>
           </div>
-          ${actions}
         </div>`;
     }
     return `
       <div class="para-wrap" data-pid="${p.pid}">
         <p class="para-text">${esc(p.clean || p.raw)}</p>
-        ${actions}
       </div>`;
   }
 
@@ -458,6 +436,87 @@ export async function renderSceneEditor(container: HTMLElement, slug: string): P
         getWraps().forEach(el => el.classList.remove('dimmed'));
       }, { once: true });
     }, { passive: true });
+  }
+
+  // ── Context menu (long press / right click) ──────────────────
+
+  function setupContextMenu(): void {
+    const menu = document.getElementById('para-menu')!;
+    const editBtn = document.getElementById('para-menu-edit')!;
+    const deleteBtn = document.getElementById('para-menu-delete')!;
+    const scroll = document.getElementById('draft-scroll')!;
+    let activePid: string | null = null;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchMoved = false;
+
+    function showMenu(x: number, y: number, pid: string): void {
+      activePid = pid;
+      deleteBtn.textContent = '✕  Delete';
+      deleteBtn.classList.remove('is-confirming');
+      menu.classList.remove('hidden');
+      // Keep menu on screen
+      requestAnimationFrame(() => {
+        const { offsetWidth: w, offsetHeight: h } = menu;
+        menu.style.left = Math.min(x, window.innerWidth  - w - 8) + 'px';
+        menu.style.top  = Math.min(y, window.innerHeight - h - 8) + 'px';
+      });
+    }
+
+    function hideMenu(): void {
+      menu.classList.add('hidden');
+      activePid = null;
+    }
+
+    // Long press
+    scroll.addEventListener('touchstart', e => {
+      touchMoved = false;
+      const para = (e.target as HTMLElement).closest<HTMLElement>('[data-pid]');
+      if (!para) return;
+      const pid = para.dataset.pid!;
+      longPressTimer = setTimeout(() => {
+        if (!touchMoved) showMenu(e.touches[0].clientX, e.touches[0].clientY, pid);
+      }, 500);
+    }, { passive: true });
+
+    scroll.addEventListener('touchmove', () => {
+      touchMoved = true;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }, { passive: true });
+
+    scroll.addEventListener('touchend', () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }, { passive: true });
+
+    // Right click
+    scroll.addEventListener('contextmenu', e => {
+      const para = (e.target as HTMLElement).closest<HTMLElement>('[data-pid]');
+      if (!para) return;
+      e.preventDefault();
+      showMenu(e.clientX, e.clientY, para.dataset.pid!);
+    });
+
+    // Actions
+    editBtn.addEventListener('click', () => {
+      if (activePid) startEdit(activePid);
+      hideMenu();
+    });
+
+    deleteBtn.addEventListener('click', () => {
+      if (!deleteBtn.classList.contains('is-confirming')) {
+        deleteBtn.textContent = '✕  Sure?';
+        deleteBtn.classList.add('is-confirming');
+        return;
+      }
+      if (activePid) deleteParagraph(activePid);
+      hideMenu();
+    });
+
+    // Dismiss on outside tap/click
+    document.addEventListener('pointerdown', e => {
+      if (!menu.classList.contains('hidden') && !menu.contains(e.target as Node)) {
+        hideMenu();
+      }
+    });
   }
 
   // ── Keyboard / visualViewport ────────────────────────────────
