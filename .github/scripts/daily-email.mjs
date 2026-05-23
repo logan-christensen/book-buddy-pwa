@@ -93,7 +93,7 @@ const resendRes = await fetch('https://api.resend.com/emails', {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    from: 'BookBuddy <bookbuddy@resend.dev>',
+    from: 'BookBuddy <bookbuddy@loganchristensen.com>',
     to: EMAIL_ADDRESS,
     subject: `Your story, today — ${today}`,
     html,
