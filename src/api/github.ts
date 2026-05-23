@@ -78,6 +78,13 @@ export async function saveScene(scene: Scene): Promise<void> {
   );
 }
 
+export async function renameScene(slug: string, newName: string): Promise<void> {
+  const scene = await loadScene(slug);
+  if (!scene) throw new Error('Scene not found');
+  scene.name = newName;
+  await saveScene(scene);
+}
+
 export async function deleteScene(slug: string): Promise<void> {
   const { githubBranch } = getSettings();
   async function deleteFile(path: string): Promise<void> {

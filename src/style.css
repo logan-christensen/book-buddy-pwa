@@ -146,27 +146,72 @@ code {
   padding-right: 16px;
   color: var(--muted);
   font-size: 0.9rem;
-  transition: opacity 0.18s;
 }
-.scene-card.is-armed .scene-card-arrow { display: none; }
+.scene-card.is-armed .scene-card-arrow,
+.scene-card.is-renaming .scene-card-arrow { display: none; }
 
+/* Armed action buttons */
+.scene-card-actions { display: none; }
+.scene-card.is-armed .scene-card-actions {
+  display: flex;
+}
+
+.scene-rename-btn,
 .scene-delete-btn {
-  display: none;
-  padding: 15px 18px;
+  padding: 15px 16px;
   background: none;
   border: none;
   border-left: 1px solid var(--border);
-  color: var(--red);
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.9rem;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s;
 }
-.scene-card.is-armed .scene-delete-btn { display: block; }
+.scene-rename-btn { color: var(--text-dim); }
+.scene-delete-btn { color: var(--red); }
+.scene-rename-btn:hover,
+.scene-rename-btn:active,
 .scene-delete-btn:hover,
 .scene-delete-btn:active { background: var(--surface); }
 .scene-delete-btn.is-confirming { font-weight: 600; }
+
+/* Renaming state */
+.scene-rename-input,
+.scene-rename-actions { display: none; }
+
+.scene-card.is-renaming .scene-card-link { display: none; }
+.scene-card.is-renaming .scene-rename-input {
+  display: block;
+  flex: 1;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid var(--amber);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+.scene-card.is-renaming .scene-rename-actions {
+  display: flex;
+}
+.scene-save-btn,
+.scene-cancel-btn {
+  padding: 15px 14px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.scene-save-btn { color: var(--amber); font-weight: 600; }
+.scene-cancel-btn { color: var(--muted); }
+.scene-save-btn:hover,
+.scene-cancel-btn:hover { background: var(--surface); }
 
 .new-scene-row {
   display: flex;
