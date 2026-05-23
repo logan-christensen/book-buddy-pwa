@@ -127,7 +127,8 @@ Output valid JSON — an array of 4 objects, each with "name" and "message" fiel
 const claudeData = await claudeRes.json();
 let personas;
 try {
-  personas = JSON.parse(claudeData.content[0].text.trim());
+  const raw = claudeData.content[0].text.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+  personas = JSON.parse(raw);
 } catch {
   console.error('Failed to parse persona JSON:', claudeData.content[0].text);
   process.exit(1);
